@@ -38,30 +38,30 @@ export default function SavingsTracker() {
     updateWeeklyChart();
   }, [goals]);
 
-  const loadData = async () => {
+  const loadData = () => {
     try {
-      const goalsData = await window.storage.get('savings_goals');
-      const streakData = await window.storage.get('savings_streak');
-      const lastDate = await window.storage.get('last_save_date');
-      const darkModeData = await window.storage.get('dark_mode');
+      const goalsData = localStorage.getItem('savings_goals');
+      const streakData = localStorage.getItem('savings_streak');
+      const lastDate = localStorage.getItem('last_save_date');
+      const darkModeData = localStorage.getItem('dark_mode');
 
-      if (goalsData) setGoals(JSON.parse(goalsData.value));
-      if (streakData) setStreak(parseInt(streakData.value));
-      if (lastDate) setLastSaveDate(lastDate.value);
-      if (darkModeData) setDarkMode(darkModeData.value === 'true');
+      if (goalsData) setGoals(JSON.parse(goalsData));
+      if (streakData) setStreak(parseInt(streakData));
+      if (lastDate) setLastSaveDate(lastDate);
+      if (darkModeData) setDarkMode(darkModeData === 'true');
     } catch (error) {
       console.log('No saved data yet');
     }
   };
 
-  const saveData = async (updatedGoals) => {
-    await window.storage.set('savings_goals', JSON.stringify(updatedGoals));
+  const saveData = (updatedGoals) => {
+    localStorage.setItem('savings_goals', JSON.stringify(updatedGoals));
   };
 
-  const toggleDarkMode = async () => {
+  const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
-    await window.storage.set('dark_mode', newMode.toString());
+    localStorage.setItem('dark_mode', newMode.toString());
   };
 
   const updateStreak = async () => {
@@ -79,8 +79,8 @@ export default function SavingsTracker() {
 
     setStreak(newStreak);
     setLastSaveDate(today);
-    await window.storage.set('savings_streak', newStreak.toString());
-    await window.storage.set('last_save_date', today);
+    localStorage.setItem('savings_streak', newStreak.toString());
+    localStorage.setItem('last_save_date', today);
   };
 
   const updateWeeklyChart = () => {
@@ -123,7 +123,7 @@ export default function SavingsTracker() {
     }
   };
 
-  const addGoal = async () => {
+  const addGoal = () => {
     if (!newGoal.name || !newGoal.target) return;
 
     const goal = {
@@ -139,21 +139,21 @@ export default function SavingsTracker() {
 
     const updatedGoals = [...goals, goal];
     setGoals(updatedGoals);
-    await saveData(updatedGoals);
+    saveData(updatedGoals);
     
     setNewGoal({ name: '', target: '', image: null });
     setShowAddGoal(false);
   };
 
-  const deleteGoal = async (goalId) => {
+  const deleteGoal = (goalId) => {
     if (!confirm('Are you sure you want to delete this goal?')) return;
 
     const updatedGoals = goals.filter(g => g.id !== goalId);
     setGoals(updatedGoals);
-    await saveData(updatedGoals);
+    saveData(updatedGoals);
   };
 
-  const addSaving = async () => {
+  const addSaving = () => {
     if (!savingAmount || !selectedGoal) return;
 
     const amount = parseFloat(savingAmount);
@@ -181,8 +181,8 @@ export default function SavingsTracker() {
     });
 
     setGoals(updatedGoals);
-    await saveData(updatedGoals);
-    await updateStreak();
+    saveData(updatedGoals);
+    updateStreak();
     
     // Celebration animation
     setCelebration(true);
@@ -193,7 +193,7 @@ export default function SavingsTracker() {
     setSelectedGoal(null);
   };
 
-  const undoLastAction = async () => {
+  const undoLastAction = () => {
     if (!lastAction) return;
 
     if (lastAction.type === 'saving') {
@@ -209,7 +209,7 @@ export default function SavingsTracker() {
       });
 
       setGoals(updatedGoals);
-      await saveData(updatedGoals);
+      saveData(updatedGoals);
       setLastAction(null);
     } else if (lastAction.type === 'borrow') {
       const updatedGoals = goals.map(g => {
@@ -224,12 +224,12 @@ export default function SavingsTracker() {
       });
 
       setGoals(updatedGoals);
-      await saveData(updatedGoals);
+      saveData(updatedGoals);
       setLastAction(null);
     }
   };
 
-  const borrowMoney = async () => {
+  const borrowMoney = () => {
     if (!borrowAmount || !selectedGoal) return;
 
     const amount = parseFloat(borrowAmount);
@@ -264,7 +264,7 @@ export default function SavingsTracker() {
     });
 
     setGoals(updatedGoals);
-    await saveData(updatedGoals);
+    saveData(updatedGoals);
     
     setBorrowAmount('');
     setBorrowNote('');
