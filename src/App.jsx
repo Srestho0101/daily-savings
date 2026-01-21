@@ -1,8 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, TrendingUp, Target, ArrowRight, Plus, Calendar, Trophy, Flame, ChevronRight, Camera, Coins, Moon, Sun, Trash2, Undo2, X } from 'lucide-react';
+import { Sparkles, Plus, Flame, Moon, Sun, Trash2, Undo2, X, LogOut, Mail, Lock, Coins, Camera, ArrowRight, Trophy } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+const firebaseConfig = {
+  apiKey: "AIzaSyCqwPMDtUtNoSZO4BJFNlTGcZtcCXSUYHs",
+  authDomain: "funding-master.firebaseapp.com",
+  projectId: "funding-master",
+  storageBucket: "funding-master.firebasestorage.app",
+  messagingSenderId: "682820801882",
+  appId: "1:682820801882:web:dfc1ca897e8926b746cf63",
+  measurementId: "G-0C8WNWBXYS"
+};
+
 export default function SavingsTracker() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authMode, setAuthMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
   const [goals, setGoals] = useState([]);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [showAddSaving, setShowAddSaving] = useState(false);
@@ -15,83 +31,135 @@ export default function SavingsTracker() {
   const [darkMode, setDarkMode] = useState(false);
   const [lastAction, setLastAction] = useState(null);
   const [buttonPress, setButtonPress] = useState(null);
-
-  // New goal form
-  const [newGoal, setNewGoal] = useState({
-    name: '',
-    target: '',
-    image: null
-  });
-
-  // Add saving form
+  const [newGoal, setNewGoal] = useState({ name: '', target: '', image: null });
   const [savingAmount, setSavingAmount] = useState('');
-
-  // Borrow form
   const [borrowAmount, setBorrowAmount] = useState('');
   const [borrowNote, setBorrowNote] = useState('');
+  const [auth, setAuth] = useState(null);
+  const [db, setDb] = useState(null);
 
   useEffect(() => {
-    loadData();
+    const script1 = document.createElement('script');
+    script1.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
+    document.body.appendChild(script1);
+
+    const script2 = document.createElement('script');
+    script2.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js';
+    document.body.appendChild(script2);
+
+    const script3 = document.createElement('script');
+    script3.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js';
+    document.body.appendChild(script3);
+
+    script3.onload = () => {
+      if (window.firebase) {
+        window.firebase.initializeApp(firebaseConfig);
+        const authInstance = window.firebase.auth();
+        const dbInstance = window.firebase.firestore();
+        setAuth(authInstance);
+        setDb(dbInstance);
+        authInstance.onAuthStateChanged((user) => {
+          setUser(user);
+          setLoading(false);
+          if (user) loadUserData(user.uid, dbInstance);
+        });
+      }
+    };
   }, []);
 
-  useEffect(() => {
-    updateWeeklyChart();
-  }, [goals]);
-
-  const loadData = () => {
+  const loadUserData = async (userId, database) => {
     try {
-      const goalsData = localStorage.getItem('savings_goals');
-      const streakData = localStorage.getItem('savings_streak');
-      const lastDate = localStorage.getItem('last_save_date');
-      const darkModeData = localStorage.getItem('dark_mode');
-
-      if (goalsData) setGoals(JSON.parse(goalsData));
-      if (streakData) setStreak(parseInt(streakData));
-      if (lastDate) setLastSaveDate(lastDate);
-      if (darkModeData) setDarkMode(darkModeData === 'true');
+      const doc = await database.collection('users').doc(userId).get();
+      if (doc.exists) {
+        const data = doc.data();
+        setGoals(data.goals || []);
+        setStreak(data.streak || 0);
+        setLastSaveDate(data.lastSaveDate || null);
+        setDarkMode(data.darkMode || false);
+      }
     } catch (error) {
-      console.log('No saved data yet');
+      console.error('Error loading data:', error);
     }
   };
 
-  const saveData = (updatedGoals) => {
-    localStorage.setItem('savings_goals', JSON.stringify(updatedGoals));
+  const saveUserData = async (updatedGoals, updatedStreak, updatedLastSave, updatedDarkMode) => {
+    if (!user || !db) return;
+    try {
+      await db.collection('users').doc(user.uid).set({
+        goals: updatedGoals !== undefined ? updatedGoals : goals,
+        streak: updatedStreak !== undefined ? updatedStreak : streak,
+        lastSaveDate: updatedLastSave !== undefined ? updatedLastSave : lastSaveDate,
+        darkMode: updatedDarkMode !== undefined ? updatedDarkMode : darkMode,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error saving data:', error);
+    }
+  };
+
+const handleSignUp = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      await auth.createUserWithEmailAndPassword(email, password);
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      setGoals([]);
+      setStreak(0);
+      setLastSaveDate(null);
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
   };
 
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
-    localStorage.setItem('dark_mode', newMode.toString());
+    saveUserData(undefined, undefined, undefined, newMode);
   };
 
-  const updateStreak = async () => {
+  const updateStreak = () => {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
-
     if (lastSaveDate === today) return;
-
     let newStreak = streak;
     if (lastSaveDate === yesterday || lastSaveDate === null) {
       newStreak = streak + 1;
     } else {
       newStreak = 1;
     }
-
     setStreak(newStreak);
     setLastSaveDate(today);
-    localStorage.setItem('savings_streak', newStreak.toString());
-    localStorage.setItem('last_save_date', today);
+    saveUserData(undefined, newStreak, today, undefined);
   };
+
+  useEffect(() => {
+    updateWeeklyChart();
+  }, [goals]);
 
   const updateWeeklyChart = () => {
     const last7Days = [];
     const today = new Date();
-    
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toDateString();
-      
       let dayTotal = 0;
       goals.forEach(goal => {
         if (goal.savings) {
@@ -102,13 +170,11 @@ export default function SavingsTracker() {
           });
         }
       });
-
       last7Days.push({
         day: date.toLocaleDateString('en', { weekday: 'short' }),
         amount: dayTotal
       });
     }
-
     setWeeklyData(last7Days);
   };
 
@@ -125,7 +191,6 @@ export default function SavingsTracker() {
 
   const addGoal = () => {
     if (!newGoal.name || !newGoal.target) return;
-
     const goal = {
       id: Date.now(),
       name: newGoal.name,
@@ -136,34 +201,31 @@ export default function SavingsTracker() {
       borrows: [],
       createdAt: new Date().toISOString()
     };
-
     const updatedGoals = [...goals, goal];
     setGoals(updatedGoals);
-    saveData(updatedGoals);
-    
+    saveUserData(updatedGoals);
     setNewGoal({ name: '', target: '', image: null });
     setShowAddGoal(false);
   };
 
   const deleteGoal = (goalId) => {
     if (!confirm('Are you sure you want to delete this goal?')) return;
-
     const updatedGoals = goals.filter(g => g.id !== goalId);
     setGoals(updatedGoals);
-    saveData(updatedGoals);
+    saveUserData(updatedGoals);
   };
 
   const addSaving = () => {
     if (!savingAmount || !selectedGoal) return;
-
     const amount = parseFloat(savingAmount);
+    const savingId = Date.now();
     const updatedGoals = goals.map(g => {
       if (g.id === selectedGoal.id) {
         return {
           ...g,
           current: g.current + amount,
           savings: [...(g.savings || []), {
-            id: Date.now(),
+            id: savingId,
             amount,
             date: new Date().toISOString()
           }]
@@ -171,23 +233,17 @@ export default function SavingsTracker() {
       }
       return g;
     });
-
-    // Store for undo
     setLastAction({
       type: 'saving',
       goalId: selectedGoal.id,
       amount: amount,
-      savingId: Date.now()
+      savingId: savingId
     });
-
     setGoals(updatedGoals);
-    saveData(updatedGoals);
+    saveUserData(updatedGoals);
     updateStreak();
-    
-    // Celebration animation
     setCelebration(true);
     setTimeout(() => setCelebration(false), 2000);
-
     setSavingAmount('');
     setShowAddSaving(false);
     setSelectedGoal(null);
@@ -195,7 +251,6 @@ export default function SavingsTracker() {
 
   const undoLastAction = () => {
     if (!lastAction) return;
-
     if (lastAction.type === 'saving') {
       const updatedGoals = goals.map(g => {
         if (g.id === lastAction.goalId) {
@@ -207,9 +262,8 @@ export default function SavingsTracker() {
         }
         return g;
       });
-
       setGoals(updatedGoals);
-      saveData(updatedGoals);
+      saveUserData(updatedGoals);
       setLastAction(null);
     } else if (lastAction.type === 'borrow') {
       const updatedGoals = goals.map(g => {
@@ -222,22 +276,19 @@ export default function SavingsTracker() {
         }
         return g;
       });
-
       setGoals(updatedGoals);
-      saveData(updatedGoals);
+      saveUserData(updatedGoals);
       setLastAction(null);
     }
   };
 
   const borrowMoney = () => {
     if (!borrowAmount || !selectedGoal) return;
-
     const amount = parseFloat(borrowAmount);
     if (amount > selectedGoal.current) {
       alert("You don't have enough saved!");
       return;
     }
-
     const borrowId = Date.now();
     const updatedGoals = goals.map(g => {
       if (g.id === selectedGoal.id) {
@@ -254,18 +305,14 @@ export default function SavingsTracker() {
       }
       return g;
     });
-
-    // Store for undo
     setLastAction({
       type: 'borrow',
       goalId: selectedGoal.id,
       amount: amount,
       borrowId: borrowId
     });
-
     setGoals(updatedGoals);
-    saveData(updatedGoals);
-    
+    saveUserData(updatedGoals);
     setBorrowAmount('');
     setBorrowNote('');
     setShowBorrow(false);
@@ -288,9 +335,93 @@ export default function SavingsTracker() {
   const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
   const inputBg = darkMode ? 'bg-gray-700 text-white' : 'bg-white';
 
-  return (
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+        <div className="text-white text-2xl font-bold animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full mb-4">
+              <Coins className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+              Savings Tracker
+            </h1>
+            <p className="text-gray-500">Track your savings, achieve your goals</p>
+          </div>
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={() => setAuthMode('login')}
+              className={`flex-1 py-2 rounded-xl font-semibold transition-all ${
+                authMode === 'login' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              Login
+            </button>
+            <button
+              onClick={() => setAuthMode('signup')}
+              className={`flex-1 py-2 rounded-xl font-semibold transition-all ${
+                authMode === 'signup' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
+          <form onSubmit={authMode === 'login' ? handleLogin : handleSignUp} className="space-y-4">
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 outline-none"
+                required
+              />
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 outline-none"
+                required
+              />
+            </div>
+            {authError && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-xl text-sm">
+                {authError}
+              </div>
+            )}
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+            >
+              {authMode === 'login' ? 'Login' : 'Create Account'}
+            </button>
+          </form>
+          <p className="text-center text-gray-500 text-sm mt-6">
+            {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
+            <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-purple-600 font-semibold">
+              {authMode === 'login' ? 'Sign Up' : 'Login'}
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+return (
     <div className={`min-h-screen ${bgClass} p-4 pb-20 transition-colors duration-300`}>
-      {/* Celebration Overlay */}
       {celebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="animate-ping">
@@ -300,24 +431,28 @@ export default function SavingsTracker() {
         </div>
       )}
 
-      {/* Header */}
       <div className={`${cardBg} rounded-3xl shadow-lg p-6 mb-6`}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               Savings Tracker
             </h1>
-            <p className={`${textSecondary} text-sm`}>Your journey to financial freedom</p>
+            <p className={`${textSecondary} text-sm`}>{user.email}</p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={toggleDarkMode}
               onTouchStart={() => handleButtonPress('dark-mode')}
-              className={`p-3 rounded-full transition-all ${
-                buttonPress === 'dark-mode' ? 'scale-95' : 'scale-100'
-              } ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+              className={`p-3 rounded-full transition-all ${buttonPress === 'dark-mode' ? 'scale-95' : 'scale-100'} ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
             >
               {darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-gray-600" />}
+            </button>
+            <button
+              onClick={handleLogout}
+              onTouchStart={() => handleButtonPress('logout')}
+              className={`p-3 rounded-full transition-all bg-red-100 ${buttonPress === 'logout' ? 'scale-95' : 'scale-100'}`}
+            >
+              <LogOut className="w-5 h-5 text-red-600" />
             </button>
             <div className="flex items-center gap-2 bg-orange-100 dark:bg-orange-900 px-4 py-2 rounded-full">
               <Flame className="w-6 h-6 text-orange-500" />
@@ -326,7 +461,6 @@ export default function SavingsTracker() {
           </div>
         </div>
 
-        {/* Undo Button */}
         {lastAction && (
           <button
             onClick={undoLastAction}
@@ -340,7 +474,6 @@ export default function SavingsTracker() {
           </button>
         )}
 
-        {/* Weekly Chart */}
         {weeklyData.length > 0 && (
           <div className="mt-4">
             <h3 className={`text-sm font-semibold ${textPrimary} mb-2`}>This Week's Progress</h3>
@@ -364,7 +497,6 @@ export default function SavingsTracker() {
         )}
       </div>
 
-      {/* Goals List */}
       <div className="space-y-4 mb-6">
         {goals.map(goal => (
           <div key={goal.id} className={`${cardBg} rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow`}>
@@ -394,7 +526,6 @@ export default function SavingsTracker() {
                 </div>
               </div>
 
-              {/* Progress Bar */}
               <div className={`relative h-4 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'} rounded-full overflow-hidden mb-4`}>
                 <div 
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
@@ -409,7 +540,6 @@ export default function SavingsTracker() {
                 )}
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -439,7 +569,6 @@ export default function SavingsTracker() {
                 </button>
               </div>
 
-              {/* Delete button if no image */}
               {!goal.image && (
                 <button
                   onClick={() => deleteGoal(goal.id)}
@@ -457,7 +586,6 @@ export default function SavingsTracker() {
         ))}
       </div>
 
-      {/* Add Goal Button */}
       {!showAddGoal && (
         <button
           onClick={() => setShowAddGoal(true)}
@@ -470,7 +598,6 @@ export default function SavingsTracker() {
         </button>
       )}
 
-      {/* Add Goal Modal */}
       {showAddGoal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-40">
           <div className={`${cardBg} w-full rounded-t-3xl p-6`}>
@@ -536,7 +663,6 @@ export default function SavingsTracker() {
         </div>
       )}
 
-      {/* Add Saving Modal */}
       {showAddSaving && selectedGoal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-40">
           <div className={`${cardBg} w-full rounded-t-3xl p-6`}>
@@ -580,7 +706,6 @@ export default function SavingsTracker() {
         </div>
       )}
 
-      {/* Borrow Modal */}
       {showBorrow && selectedGoal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-40">
           <div className={`${cardBg} w-full rounded-t-3xl p-6`}>
