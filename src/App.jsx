@@ -189,135 +189,152 @@ const handleSignUp = async (e) => {
     }
   };
 
-  const addGoal = () => {
-    if (!newGoal.name || !newGoal.target) return;
-    const goal = {
-      id: Date.now(),
-      name: newGoal.name,
-      target: parseFloat(newGoal.target),
-      current: 0,
-      image: newGoal.image,
-      savings: [],
-      borrows: [],
-      createdAt: new Date().toISOString()
-    };
-    const updatedGoals = [...goals, goal];
-    setGoals(updatedGoals);
-    saveUserData(updatedGoals);
-    setNewGoal({ name: '', target: '', image: null });
-    setShowAddGoal(false);
+  const addGoal = async () => {
+  if (!newGoal.name || !newGoal.target) return;
+  const goal = {
+    id: Date.now(),
+    name: newGoal.name,
+    target: parseFloat(newGoal.target),
+    current: 0,
+    image: newGoal.image,
+    savings: [],
+    borrows: [],
+    createdAt: new Date().toISOString()
   };
+  const updatedGoals = [...goals, goal];
+  setGoals(updatedGoals);
+  
+  // FIX: Wait for Firebase to save
+  await saveUserData(updatedGoals);
+  
+  setNewGoal({ name: '', target: '', image: null });
+  setShowAddGoal(false);
+};
 
-  const deleteGoal = (goalId) => {
-    if (!confirm('Are you sure you want to delete this goal?')) return;
-    const updatedGoals = goals.filter(g => g.id !== goalId);
-    setGoals(updatedGoals);
-    saveUserData(updatedGoals);
-  };
+  const deleteGoal = async (goalId) => {
+  if (!confirm('Are you sure you want to delete this goal?')) return;
+  const updatedGoals = goals.filter(g => g.id !== goalId);
+  setGoals(updatedGoals);
+  
+  // FIX: Wait for Firebase to save
+  await saveUserData(updatedGoals);
+};
 
-  const addSaving = () => {
-    if (!savingAmount || !selectedGoal) return;
-    const amount = parseFloat(savingAmount);
-    const savingId = Date.now();
+  const addSaving = async () => {
+  if (!savingAmount || !selectedGoal) return;
+  const amount = parseFloat(savingAmount);
+  const savingId = Date.now();
+  
+  const updatedGoals = goals.map(g => {
+    if (g.id === selectedGoal.id) {
+      return {
+        ...g,
+        current: g.current + amount,
+        savings: [...(g.savings || []), {
+          id: savingId,
+          amount,
+          date: new Date().toISOString()
+        }]
+      };
+    }
+    return g;
+  });
+
+  setLastAction({
+    type: 'saving',
+    goalId: selectedGoal.id,
+    amount: amount,
+    savingId: savingId
+  });
+
+  setGoals(updatedGoals);
+  
+  // FIX: Wait for Firebase to save before continuing
+  await saveUserData(updatedGoals);
+  
+  updateStreak();
+  setCelebration(true);
+  setTimeout(() => setCelebration(false), 2000);
+  setSavingAmount('');
+  setShowAddSaving(false);
+  setSelectedGoal(null);
+};
+
+  const undoLastAction = async () => {
+  if (!lastAction) return;
+  if (lastAction.type === 'saving') {
     const updatedGoals = goals.map(g => {
-      if (g.id === selectedGoal.id) {
+      if (g.id === lastAction.goalId) {
         return {
           ...g,
-          current: g.current + amount,
-          savings: [...(g.savings || []), {
-            id: savingId,
-            amount,
-            date: new Date().toISOString()
-          }]
+          current: g.current - lastAction.amount,
+          savings: g.savings.filter(s => s.id !== lastAction.savingId)
         };
       }
       return g;
     });
-    setLastAction({
-      type: 'saving',
-      goalId: selectedGoal.id,
-      amount: amount,
-      savingId: savingId
-    });
     setGoals(updatedGoals);
-    saveUserData(updatedGoals);
-    updateStreak();
-    setCelebration(true);
-    setTimeout(() => setCelebration(false), 2000);
-    setSavingAmount('');
-    setShowAddSaving(false);
-    setSelectedGoal(null);
-  };
-
-  const undoLastAction = () => {
-    if (!lastAction) return;
-    if (lastAction.type === 'saving') {
-      const updatedGoals = goals.map(g => {
-        if (g.id === lastAction.goalId) {
-          return {
-            ...g,
-            current: g.current - lastAction.amount,
-            savings: g.savings.filter(s => s.id !== lastAction.savingId)
-          };
-        }
-        return g;
-      });
-      setGoals(updatedGoals);
-      saveUserData(updatedGoals);
-      setLastAction(null);
-    } else if (lastAction.type === 'borrow') {
-      const updatedGoals = goals.map(g => {
-        if (g.id === lastAction.goalId) {
-          return {
-            ...g,
-            current: g.current + lastAction.amount,
-            borrows: g.borrows.filter(b => b.id !== lastAction.borrowId)
-          };
-        }
-        return g;
-      });
-      setGoals(updatedGoals);
-      saveUserData(updatedGoals);
-      setLastAction(null);
-    }
-  };
-
-  const borrowMoney = () => {
-    if (!borrowAmount || !selectedGoal) return;
-    const amount = parseFloat(borrowAmount);
-    if (amount > selectedGoal.current) {
-      alert("You don't have enough saved!");
-      return;
-    }
-    const borrowId = Date.now();
+    await saveUserData(updatedGoals);
+    setLastAction(null);
+  } else if (lastAction.type === 'borrow') {
     const updatedGoals = goals.map(g => {
-      if (g.id === selectedGoal.id) {
+      if (g.id === lastAction.goalId) {
         return {
           ...g,
-          current: g.current - amount,
-          borrows: [...(g.borrows || []), {
-            id: borrowId,
-            amount,
-            note: borrowNote,
-            date: new Date().toISOString()
-          }]
+          current: g.current + lastAction.amount,
+          borrows: g.borrows.filter(b => b.id !== lastAction.borrowId)
         };
       }
       return g;
     });
-    setLastAction({
-      type: 'borrow',
-      goalId: selectedGoal.id,
-      amount: amount,
-      borrowId: borrowId
-    });
     setGoals(updatedGoals);
-    saveUserData(updatedGoals);
-    setBorrowAmount('');
-    setBorrowNote('');
-    setShowBorrow(false);
-    setSelectedGoal(null);
-  };
+    await saveUserData(updatedGoals);
+    setLastAction(null);
+  }
+};
+
+  const borrowMoney = async () => {
+  if (!borrowAmount || !selectedGoal) return;
+  const amount = parseFloat(borrowAmount);
+  if (amount > selectedGoal.current) {
+    alert("You don't have enough saved!");
+    return;
+  }
+  const borrowId = Date.now();
+  
+  const updatedGoals = goals.map(g => {
+    if (g.id === selectedGoal.id) {
+      return {
+        ...g,
+        current: g.current - amount,
+        borrows: [...(g.borrows || []), {
+          id: borrowId,
+          amount,
+          note: borrowNote,
+          date: new Date().toISOString()
+        }]
+      };
+    }
+    return g;
+  });
+
+  setLastAction({
+    type: 'borrow',
+    goalId: selectedGoal.id,
+    amount: amount,
+    borrowId: borrowId
+  });
+
+  setGoals(updatedGoals);
+  
+  // FIX: Wait for Firebase to save
+  await saveUserData(updatedGoals);
+  
+  setBorrowAmount('');
+  setBorrowNote('');
+  setShowBorrow(false);
+  setSelectedGoal(null);
+};
 
   const getProgress = (goal) => {
     return Math.min((goal.current / goal.target) * 100, 100);
